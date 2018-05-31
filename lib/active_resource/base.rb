@@ -1449,14 +1449,14 @@ module ActiveResource
               resource = nil
               value.map do |attrs|
                 if attrs.is_a?(Hash)
-                  resource ||= find_or_create_resource_for_collection(key)
+                  resource ||= find_resource_for_collection(key)
                   resource.new(attrs, persisted)
                 else
                   attrs.duplicable? ? attrs.dup : attrs
                 end
               end
             when Hash
-              resource = find_or_create_resource_for(key)
+              resource = find_resource_for(key)
               resource.new(value, persisted)
             else
               value.duplicable? ? value.dup : value
@@ -1594,54 +1594,50 @@ module ActiveResource
       end
 
       # Tries to find a resource for a given collection name; if it fails, then the resource is created
-      def find_or_create_resource_for_collection(name)
+      def find_resource_for_collection(name)
         return reflections[name.to_sym].klass if reflections.key?(name.to_sym)
-        find_or_create_resource_for(ActiveSupport::Inflector.singularize(name.to_s))
+        find_resource_for(ActiveSupport::Inflector.singularize(name.to_s))
+      end
+
+      # Tries to find a resource in Object, if it fails, then UnnamedResource is used instead
+      def find_resource_in_object(resource_name)
+        begin
+          Object.const_get(resource_name, false)
+        rescue => exception
+          UnnamedResource
+        end
       end
 
       # Tries to find a resource in a non empty list of nested modules
       # if it fails, then the resource is created
-      def find_or_create_resource_in_modules(resource_name, module_names)
+      def find_resource_in_modules(resource_name, module_names)
         receiver = Object
         namespaces = module_names[0, module_names.size-1].map do |module_name|
           receiver = receiver.const_get(module_name)
         end
         const_args = [resource_name, false]
-        if namespace = namespaces.reverse.detect { |ns| ns.const_defined?(*const_args) }
+        begin
+          namespace = namespaces.reverse.detect { |ns| ns.const_defined?(*const_args) }
           namespace.const_get(*const_args)
-        else
-          create_resource_for(resource_name)
+        rescue => exception
+          UnnamedResource
         end
       end
 
-      # Tries to find a resource for a given name; if it fails, then the resource is created
-      def find_or_create_resource_for(name)
+      # Tries to find a resource for a given name; if it fails, then UnnamedResource is used instead
+      def find_resource_for(name)
         return reflections[name.to_sym].klass if reflections.key?(name.to_sym)
         resource_name = name.to_s.camelize
-
-        const_args = [resource_name, false]
-        if self.class.const_defined?(*const_args)
-          self.class.const_get(*const_args)
-        else
+        begin
+          self.class.const_get(resource_name, false)
+        rescue => exception
           ancestors = self.class.name.to_s.split("::")
           if ancestors.size > 1
-            find_or_create_resource_in_modules(resource_name, ancestors)
+            find_resource_in_modules(resource_name, ancestors)
           else
-            if Object.const_defined?(*const_args)
-              Object.const_get(*const_args)
-            else
-              create_resource_for(resource_name)
-            end
+          find_resource_in_object(resource_name)
           end
         end
-      end
-
-      # Create and return a class definition for a resource inside the current resource
-      def create_resource_for(resource_name)
-        resource = self.class.const_set(resource_name, Class.new(ActiveResource::Base))
-        resource.prefix = self.class.prefix
-        resource.site   = self.class.site
-        resource
       end
 
       def split_options(options = {})
@@ -1676,6 +1672,12 @@ module ActiveResource
     include ActiveModel::Serializers::JSON
     include ActiveModel::Serializers::Xml
     include ActiveResource::Reflection
+  end
+
+  # ActiveResource::UnnamedResource is a dummy class used when mapping
+  # resources fails to find a known resource class.
+  class UnnamedResource < Base
+    self.prefix = '/'
   end
 
   ActiveSupport.run_load_hooks(:active_resource, Base)
