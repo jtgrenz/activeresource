@@ -1604,7 +1604,7 @@ module ActiveResource
         begin
           Object.const_get(resource_name, false)
         rescue => exception
-          UnnamedResource
+          create_unnamed_resource
         end
       end
 
@@ -1620,7 +1620,7 @@ module ActiveResource
           namespace = namespaces.reverse.detect { |ns| ns.const_defined?(*const_args) }
           namespace.const_get(*const_args)
         rescue => exception
-          UnnamedResource
+          create_unnamed_resource
         end
       end
 
@@ -1638,6 +1638,17 @@ module ActiveResource
           find_resource_in_object(resource_name)
           end
         end
+      end
+
+      def create_unnamed_resource
+        if self.class.const_defined?(:UnnamedResource, false)
+          resource = self.class.const_get(:UnnamedResource, false)
+        else
+          resource = self.class.const_set(:UnnamedResource, Class.new(ActiveResource::Base))
+        end
+        resource.prefix = self.class.prefix
+        resource.site   = self.class.site
+        resource
       end
 
       def split_options(options = {})
@@ -1676,9 +1687,9 @@ module ActiveResource
 
   # ActiveResource::UnnamedResource is a dummy class used when mapping
   # resources fails to find a known resource class.
-  class UnnamedResource < Base
-    self.prefix = '/'
-  end
+  # class UnnamedResource < Base
+  # #   self.prefix = '/'
+  # end
 
   ActiveSupport.run_load_hooks(:active_resource, Base)
 end
