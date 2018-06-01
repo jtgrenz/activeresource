@@ -1603,7 +1603,7 @@ module ActiveResource
       def find_resource_in_object(resource_name)
         begin
           Object.const_get(resource_name, false)
-        rescue => exception
+        rescue
           create_unnamed_resource
         end
       end
@@ -1619,7 +1619,7 @@ module ActiveResource
         begin
           namespace = namespaces.reverse.detect { |ns| ns.const_defined?(*const_args) }
           namespace.const_get(*const_args)
-        rescue => exception
+        rescue
           create_unnamed_resource
         end
       end
@@ -1630,7 +1630,7 @@ module ActiveResource
         resource_name = name.to_s.camelize
         begin
           self.class.const_get(resource_name, false)
-        rescue => exception
+        rescue
           ancestors = self.class.name.to_s.split("::")
           if ancestors.size > 1
             find_resource_in_modules(resource_name, ancestors)
@@ -1685,11 +1685,6 @@ module ActiveResource
     include ActiveResource::Reflection
   end
 
-  # ActiveResource::UnnamedResource is a dummy class used when mapping
-  # resources fails to find a known resource class.
-  # class UnnamedResource < Base
-  # #   self.prefix = '/'
-  # end
 
   ActiveSupport.run_load_hooks(:active_resource, Base)
 end
